@@ -4,15 +4,7 @@ backend/chatbot.py
 
 Complete RAG Chatbot
 
-User Question
-      ↓
-Retriever
-      ↓
-Top Documents
-      ↓
-Gemini
-      ↓
-Final Answer
+Author: ACB AI Assistant
 """
 
 from retriever import Retriever
@@ -35,18 +27,53 @@ class ACBChatbot:
 
     def ask(self, question: str):
 
-        docs = self.retriever.search(
+        # Retrieve relevant documents
+        documents = self.retriever.search(
             question,
             top_k=5,
         )
 
+        # No documents found
+        if len(documents) == 0:
+
+            return {
+                "answer": "I couldn't find any relevant information in the documentation.",
+                "sources": [],
+                "documents": [],
+            }
+
+        # Generate answer
         answer = self.llm.generate_answer(
             question,
-            docs,
+            documents,
         )
 
-        return answer
+        # Extract unique sources
+        sources = []
 
+        seen = set()
+
+        for doc in documents:
+
+            if doc["source"] not in seen:
+
+                seen.add(doc["source"])
+
+                sources.append(doc["source"])
+
+        return {
+
+            "answer": answer,
+
+            "sources": sources,
+
+            "documents": documents,
+        }
+
+
+# ==========================================================
+# Test
+# ==========================================================
 
 if __name__ == "__main__":
 
@@ -61,10 +88,20 @@ if __name__ == "__main__":
         if question.lower() == "exit":
             break
 
-        print("\nSearching documentation...\n")
+        response = chatbot.ask(question)
 
-        answer = chatbot.ask(question)
+        print()
 
         print("=" * 60)
-        print(answer)
+
+        print(response["answer"])
+
+        print()
+
+        print("Sources:")
+
+        for source in response["sources"]:
+
+            print("-", source)
+
         print("=" * 60)
