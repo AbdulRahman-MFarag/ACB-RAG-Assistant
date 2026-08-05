@@ -32,7 +32,7 @@ Author: ACB AI Assistant
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pdf_loader import PDFLoader
-
+import re
 
 class TextSplitter:
     """
@@ -41,8 +41,8 @@ class TextSplitter:
 
     def __init__(
         self,
-        chunk_size: int = 800,
-        chunk_overlap: int = 150,
+        chunk_size: int = 600,
+        chunk_overlap: int = 120,
     ):
         """
         Initialize the text splitter.
@@ -59,13 +59,82 @@ class TextSplitter:
             chunk_size=self.chunk_size,
             chunk_overlap=self.chunk_overlap,
             separators=[
-                "\n\n",
-                "\n",
-                ". ",
-                " ",
-                ""
+              "\n\n",
+              "\n",
+              ". ",
+              ";",
+              ":",
+              ",",
+              " ",
+              ""
             ]
         )
+
+    def clean_text(self, text: str) -> str:
+        """
+        Clean extracted PDF text before chunking.
+        """
+
+        # Normalize line endings
+        text = text.replace("\r", "\n")
+
+        # Remove repeated spaces
+        text = re.sub(r"[ \t]+", " ", text)
+
+        # Remove multiple blank lines
+        text = re.sub(r"\n{3,}", "\n\n", text)
+
+        lines = []
+
+        for line in text.split("\n"):
+
+            line = line.strip()
+
+            if not line:
+                continue
+
+            # Remove page numbers
+            if re.fullmatch(r"\d+", line):
+                continue
+
+            # Remove isolated letters
+            if re.fullmatch(r"[A-Z]", line):
+                continue
+
+            # Remove figure labels
+            if re.fullmatch(r"[A-Z]\d+", line):
+                continue
+
+            if re.fullmatch(r"Figure\s+\d+\.?", line):
+                continue
+
+            if re.fullmatch(r"Fig\.\s*\d+", line):
+                continue
+
+            if re.fullmatch(r"[A-Za-z]", line):
+                continue
+            # Remove copyright/footer lines
+            if line == "Schneider Electric":
+                continue
+
+            if "All rights reserved" in line:
+                continue
+
+            if line == "www.se.com":
+                continue
+
+            if "DOCA0" in line:
+                continue
+
+            # Remove page references like "Page 23"
+            if re.fullmatch(r"Page\s+\d+", line):
+                continue
+
+            lines.append(line)
+
+        text = "\n".join(lines)
+
+        return text.strip()
 
     def split_documents(self, documents: list[dict]) -> list[dict]:
         """
@@ -86,7 +155,11 @@ class TextSplitter:
 
         for document in documents:
 
-            split_text = self.splitter.split_text(document["text"])
+            cleaned_text = self.clean_text(document["text"])
+
+            if not cleaned_text:
+                continue
+            split_text = self.splitter.split_text(cleaned_text)
 
             for index, piece in enumerate(split_text, start=1):
 
@@ -104,6 +177,7 @@ class TextSplitter:
                         "page": document["page"],
                         "source": f"{document['filename']} - Page {document['page']}",
                         "text": piece.strip(),
+                        "length": len(piece.strip()),
                     }
                 )
 
@@ -132,8 +206,8 @@ if __name__ == "__main__":
     # ---------------------------------------------------
 
     splitter = TextSplitter(
-        chunk_size=800,
-        chunk_overlap=150,
+        chunk_size=600,
+        chunk_overlap=120,
     )
 
     chunks = splitter.split_documents(documents)
